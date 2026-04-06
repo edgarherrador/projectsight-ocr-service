@@ -1,0 +1,21 @@
+[project]
+name = "projectsight-ocr-service"
+version = "0.1.0"
+description = "PDF to Markdown converter using Gemini 3.1 Pro with FastAPI and Gradio"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "gradio>=4.0.0",
+    "google-genai>=1.0.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "sqlalchemy>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pypdf>=4.0.0",
+]
+
+[tool.setuptools]
+packages = ["api", "auth", "cache", "config", "models", "utils", "web"]
