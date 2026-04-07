@@ -19,7 +19,7 @@ AI-powered PDF to Markdown converter using Google Gemini (configurable model wit
 - Python 3.10+
 - Google Gemini API Key
 - System Prompt for Gemini
-- Max PDF size: 5 MB
+- Max PDF size: 30 MB
 
 ## 🚀 Quick Start
 
@@ -52,6 +52,8 @@ cp .env.example .env  # macOS/Linux
 # Edit .env and add your credentials:
 # GEMINI_API_KEY=your_actual_api_key_here
 # SYSTEM_PROMPT=./prompts/system_prompt.prompty
+# BENCHMARK_MODELS=gemini-3.1-pro-preview,gemini-2.5-pro
+# BENCHMARK_MODEL_PRICES=gemini-3.1-pro-preview:INPUT_PER_1M:OUTPUT_PER_1M,gemini-2.5-pro:INPUT_PER_1M:OUTPUT_PER_1M
 ```
 
 ### 3. Run the Application
@@ -205,8 +207,62 @@ GRADIO_HOST=127.0.0.1
 GRADIO_PORT=7860
 
 # File size limit
-MAX_FILE_SIZE_MB=5
+MAX_FILE_SIZE_MB=30
+
+# Benchmark defaults
+BENCHMARK_MODELS=gemini-3.1-pro-preview,gemini-2.5-pro
+BENCHMARK_DISABLE_CACHE=true
+BENCHMARK_IGNORE_SIZE_LIMIT=true
+BENCHMARK_MAX_FILE_SIZE_MB=50
+
+# Optional pricing map for estimated benchmark cost (USD per 1M tokens)
+# Format: model:input_per_1m:output_per_1m,model2:input_per_1m:output_per_1m
+BENCHMARK_MODEL_PRICES=
 ```
+
+## ⚖️ Quick OCR Benchmark (Quality + Cost + Latency)
+
+Use the benchmark runner to compare models over a local PDF dataset without cache effects.
+
+### What it measures
+
+- Text similarity (reference PDF extracted text vs generated Markdown)
+- Latency (total, p50, p95)
+- Token usage (input/output/total when exposed by SDK)
+- Estimated cost from token totals and configured prices
+- Throughput (pages per minute)
+- Basic robustness (failed pages, empty output rate)
+
+### Run benchmark
+
+```bash
+uv run python scripts/benchmark_ocr.py --pdf-dir ./dataset
+```
+
+### Optional flags
+
+```bash
+# Limit processed pages for quick demos
+uv run python scripts/benchmark_ocr.py --pdf-dir ./dataset --max-pages 5
+
+# Override models
+uv run python scripts/benchmark_ocr.py --pdf-dir ./dataset \
+  --model gemini-3.1-pro-preview --model gemini-2.5-pro
+
+# Override prices directly from CLI (USD per 1M tokens)
+uv run python scripts/benchmark_ocr.py --pdf-dir ./dataset \
+  --price gemini-3.1-pro-preview:INPUT_PER_1M:OUTPUT_PER_1M \
+  --price gemini-2.5-pro:INPUT_PER_1M:OUTPUT_PER_1M
+```
+
+### Outputs
+
+- `benchmark_results.json`: full results including page-level metrics
+- `benchmark_results.csv`: summary rows by file/model
+
+Notes:
+- Internal model context window is not directly observable from the API, so it is exported as `null`.
+- If token usage is unavailable for a response, estimated cost is exported as `null`.
 
 ## 🗄️ Database
 
@@ -267,7 +323,7 @@ copy .env.example .env
 ```
 ❌ Error: File is empty
 ```
-**Solution**: Upload a valid PDF file under 5 MB
+**Solution**: Upload a valid PDF file under 30 MB
 
 ### Gemini API Error
 ```

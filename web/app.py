@@ -37,6 +37,16 @@ def convert_pdf(pdf_file):
         with open(pdf_file, "rb") as f:
             pdf_content = f.read()
 
+        file_size_mb = len(pdf_content) / (1024 * 1024)
+        if file_size_mb > settings.max_file_size_mb:
+            return (
+                "",
+                (
+                    f"❌ **Error**: File size {file_size_mb:.2f} MB exceeds "
+                    f"maximum allowed size of {settings.max_file_size_mb} MB"
+                ),
+            )
+
         # Send to API
         files = {
             "file": (Path(pdf_file).name, pdf_content, "application/pdf")
@@ -158,6 +168,7 @@ def create_interface():
         - 📊 Page-by-page processing
         - 🚀 Fast results from cache
         - 📋 View processing history
+        - 📏 Max upload size: 30 MB
         """
         )
 

@@ -104,7 +104,7 @@ async def convert_pdf(file: UploadFile = File(...)):
     Results are cached to avoid reprocessing the same PDF.
 
     **Parameters:**
-    - **file**: PDF file to convert (max 5 MB)
+    - **file**: PDF file to convert (max 30 MB)
 
     **Returns:**
     - **pdf_id**: Unique identifier for the PDF (SHA256 hash)

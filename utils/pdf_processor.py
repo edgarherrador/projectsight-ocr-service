@@ -7,7 +7,7 @@ from pypdf import PdfReader
 from config.settings import settings
 
 
-def validate_pdf_size(file_content: bytes) -> tuple[bool, str]:
+def validate_pdf_size(file_content: bytes, max_file_size_mb: int | None = None) -> tuple[bool, str]:
     """
     Validate that PDF file size is within acceptable limits.
 
@@ -18,17 +18,23 @@ def validate_pdf_size(file_content: bytes) -> tuple[bool, str]:
         Tuple of (is_valid, message)
     """
     file_size_mb = len(file_content) / (1024 * 1024)
+    effective_limit = (
+        max_file_size_mb if max_file_size_mb is not None else settings.max_file_size_mb
+    )
 
-    if file_size_mb > settings.max_file_size_mb:
+    if file_size_mb > effective_limit:
         return False, (
             f"File size {file_size_mb:.2f} MB exceeds maximum "
-            f"allowed size of {settings.max_file_size_mb} MB"
+            f"allowed size of {effective_limit} MB"
         )
 
     return True, "File size is valid"
 
 
-def extract_pdf_text(file_content: bytes) -> tuple[bool, str | list[str], str]:
+def extract_pdf_text(
+    file_content: bytes,
+    max_file_size_mb: int | None = None,
+) -> tuple[bool, str | list[str], str]:
     """
     Extract text from PDF file, page by page.
 
@@ -42,7 +48,10 @@ def extract_pdf_text(file_content: bytes) -> tuple[bool, str | list[str], str]:
     """
     try:
         # Validate file size first
-        is_valid, size_message = validate_pdf_size(file_content)
+        is_valid, size_message = validate_pdf_size(
+            file_content,
+            max_file_size_mb=max_file_size_mb,
+        )
         if not is_valid:
             return False, size_message, "File validation failed"
 
