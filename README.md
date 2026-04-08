@@ -2,6 +2,10 @@
 
 AI-powered PDF to Markdown converter using Google Gemini (configurable model with fallback) with FastAPI backend and Gradio web interface.
 
+## 📘 Architecture and Onboarding
+
+- Direct guide: [docs/architecture-and-onboarding.md](docs/architecture-and-onboarding.md)
+
 ## ✨ Features
 
 - 🤖 **AI-Powered Conversion**: Uses Google Gemini for intelligent PDF parsing and Markdown formatting
