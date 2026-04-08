@@ -146,6 +146,9 @@ async def get_available_models():
     success, available_models, message = list_available_models_for_generate_content()
     configured_model = settings.gemini_model
     candidate_models = settings.get_candidate_models()
+    policy_small_model = settings.gemini_small_doc_model
+    policy_large_model = settings.gemini_large_doc_model
+    policy_threshold = settings.gemini_large_doc_page_threshold
 
     normalized_available = {
         model_name.removeprefix("models/") for model_name in available_models
@@ -155,12 +158,23 @@ async def get_available_models():
     ]
 
     configured_available = configured_model.removeprefix("models/") in normalized_available
+    policy_small_available = policy_small_model.removeprefix("models/") in normalized_available
+    policy_large_available = policy_large_model.removeprefix("models/") in normalized_available
 
     return {
         "configured_model": configured_model,
         "candidate_models": candidate_models,
+        "conversion_policy": {
+            "small_document_model": policy_small_model,
+            "large_document_model": policy_large_model,
+            "large_document_page_threshold": policy_threshold,
+        },
         "available_models": available_models,
         "configured_model_available": configured_available,
+        "conversion_policy_models_available": {
+            "small_document_model": policy_small_available,
+            "large_document_model": policy_large_available,
+        },
         "recommendation": (
             "Configured model is available"
             if configured_available
@@ -248,6 +262,7 @@ async def convert_pdf(
 
                 if run_judge:
                     decision = evaluate_metrics(cached_metrics, run_trigger)
+                    cached_metrics["judge_model"] = _normalize_model_name(settings.judge_model)
                     save_ocr_metrics(
                         pdf_id=cached_result["pdf_id"],
                         file_name=file.filename,
@@ -277,9 +292,22 @@ async def convert_pdf(
             f"Processing PDF: {file.filename} ({page_count} pages)"
         )
 
+        conversion_candidate_models = settings.get_conversion_candidate_models(page_count)
+        selected_conversion_model = (
+            conversion_candidate_models[0] if conversion_candidate_models else settings.gemini_model
+        )
+        logger.info(
+            "Conversion model policy selected model '%s' for %s pages (threshold=%s)",
+            selected_conversion_model,
+            page_count,
+            settings.gemini_large_doc_page_threshold,
+        )
+
         # Process with Gemini and collect metrics for judge and UI reporting.
         success, markdown_content, gemini_message, metrics = process_pdf_with_gemini_with_metrics(
-            content
+            content,
+            model_override=selected_conversion_model,
+            candidate_models_override=conversion_candidate_models,
         )
 
         if not success:
@@ -307,9 +335,15 @@ async def convert_pdf(
             logger.warning(f"Failed to cache PDF: {file.filename}")
 
         metrics["requested_model"] = _normalize_model_name(
-            metrics.get("requested_model") or settings.gemini_model
+            metrics.get("requested_model") or selected_conversion_model
         )
+        metrics["candidate_models"] = [
+            _normalize_model_name(model_name)
+            for model_name in (metrics.get("candidate_models") or conversion_candidate_models)
+            if (model_name or "").strip()
+        ]
         metrics["estimated_total_cost_usd"] = _estimate_total_cost_usd(metrics)
+        metrics["judge_model"] = _normalize_model_name(settings.judge_model)
 
         similarity = metrics.get("average_similarity")
         run_judge, run_trigger = should_run_judge(
@@ -390,6 +424,8 @@ async def get_pdf_metrics(pdf_id: str):
             semaphore=decision_data.get("semaphore", "AMBER"),
             reason=decision_data.get("reason", "No reason provided"),
             run_trigger=decision_data.get("run_trigger", "unknown"),
+            judge_model=decision_data.get("judge_model"),
+            judge_mode=decision_data.get("judge_mode"),
         )
 
     page_review_references_data = _build_page_review_references(metrics)
@@ -427,6 +463,35 @@ async def get_pdf_metrics(pdf_id: str):
         decision=decision,
         timestamp=record["timestamp"],
     )
+
+
+@app.get(
+    "/api/judge/diagnostics/{pdf_id}",
+    tags=["Metrics"],
+)
+async def get_judge_diagnostics(pdf_id: str):
+    """Return LLM judge diagnostics for the latest metrics record of a PDF id."""
+    record = get_latest_ocr_metrics(pdf_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"No metrics found for pdf_id={pdf_id}")
+
+    decision_data = record.get("decision") or {}
+    metrics_data = record.get("metrics") or {}
+
+    return {
+        "pdf_id": record["pdf_id"],
+        "file_name": record["file_name"],
+        "timestamp": record["timestamp"],
+        "judge_mode": decision_data.get("judge_mode"),
+        "judge_model": decision_data.get("judge_model") or metrics_data.get("judge_model"),
+        "run_trigger": decision_data.get("run_trigger"),
+        "decision": {
+            "verdict": decision_data.get("verdict"),
+            "semaphore": decision_data.get("semaphore"),
+            "reason": decision_data.get("reason"),
+        },
+        "diagnostics": decision_data.get("judge_diagnostics"),
+    }
 
 
 @app.delete(

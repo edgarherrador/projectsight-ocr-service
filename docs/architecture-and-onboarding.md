@@ -49,7 +49,7 @@ sequenceDiagram
         API->>OCR: Extract pages + generate markdown + metrics
         OCR-->>API: markdown + page metrics + totals
         API->>Judge: should_run_judge + evaluate_metrics
-        Judge-->>API: decision (or skip)
+            Judge-->>API: decision (llm/rules_fallback/skip)
         API->>DB: Save markdown cache
         API->>DB: Save OCR metrics/decision
         API-->>Web: New response
@@ -59,6 +59,11 @@ sequenceDiagram
     API->>DB: Load latest metrics snapshot
     DB-->>API: Metrics + decision
     API-->>Web: Actionable quality references
+
+        Web->>API: GET /api/judge/diagnostics/{pdf_id}
+        API->>DB: Load latest judge diagnostics
+        DB-->>API: decision_json metadata
+        API-->>Web: judge_mode/model + diagnostics payload
 ```
 
 ### 1.3 Data layer model
@@ -93,7 +98,9 @@ erDiagram
 - Content-based caching using SHA256 avoids duplicate OCR work.
 - Metrics are stored as snapshots to keep a quality audit trail over time.
 - Judge execution is configurable at policy level and overridable per request (`auto`, `force`, `skip`).
+- Judge uses Gemini 3.1 Pro for final decision when available; deterministic rules are used as fallback.
 - Human review is guided via page-level references (`review_pages`, `page_review_references`).
+- Judge diagnostics are persisted with decisions for traceability in API/UI.
 
 ## 2. Onboarding (setup + flow + key endpoints)
 
@@ -122,7 +129,10 @@ Create `.env` from `.env.example` and set at least:
 ```ini
 GEMINI_API_KEY=your_api_key_here
 SYSTEM_PROMPT=./prompts/system_prompt.prompty
-GEMINI_MODEL=gemini-3.1-pro
+GEMINI_MODEL=gemini-3.1-flash
+GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash
+GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite
+GEMINI_LARGE_DOC_PAGE_THRESHOLD=100
 MAX_FILE_SIZE_MB=30
 DATABASE_PATH=./cache/pdf_cache.db
 API_HOST=127.0.0.1
@@ -131,6 +141,7 @@ GRADIO_HOST=127.0.0.1
 GRADIO_PORT=7860
 
 # Judge controls
+JUDGE_MODEL=gemini-3.1-pro-preview
 JUDGE_ENABLED=true
 JUDGE_SIMILARITY_THRESHOLD=0.95
 JUDGE_ONLY_NEW_DOCUMENTS=true
@@ -178,6 +189,7 @@ Access points:
 | `/api/models` | GET | List available Gemini models |
 | `/api/convert` | POST | Convert PDF to markdown (supports `judge_mode`) |
 | `/api/metrics/{pdf_id}` | GET | Get latest OCR metrics + judge decision + page references |
+| `/api/judge/diagnostics/{pdf_id}` | GET | Get judge diagnostics (mode/model, latency, summarized signals, parsed output) |
 | `/api/history` | GET | List processed/cached PDFs |
 | `/api/convert/{pdf_id}` | GET | Retrieve cached converted markdown |
 | `/api/cache` | DELETE | Clear server cache (`include_metrics=true/false`) |
@@ -202,3 +214,9 @@ curl -X DELETE "http://localhost:8000/api/cache?include_metrics=true"
 - Empty/invalid PDF error: validate file and size (`MAX_FILE_SIZE_MB`).
 - Gemini failures: verify key and available models in `/api/models`.
 - Unexpected cached behavior: clear cache and retry conversion.
+
+## 2.5 Judge behavior notes
+
+- Judge execution mode returned by metrics/diagnostics can be `llm`, `rules_fallback`, `rules`, or `skipped`.
+- Decision payload includes `judge_model` and `judge_mode` to make audits explicit.
+- For cached documents, `force` mode triggers a fresh judge run and stores a new metrics snapshot.

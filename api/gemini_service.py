@@ -275,6 +275,7 @@ def process_pdf_with_gemini(file_content: bytes) -> tuple[bool, str, str]:
 def process_pdf_with_gemini_with_metrics(
     file_content: bytes,
     model_override: str | None = None,
+    candidate_models_override: list[str] | None = None,
     max_pages: int | None = None,
     ignore_size_limit: bool = False,
     max_chars_per_page: int | None = None,
@@ -286,7 +287,16 @@ def process_pdf_with_gemini_with_metrics(
         Tuple of (success, markdown_content, message, metrics)
     """
     system_prompt_text = settings.get_system_prompt_text()
-    requested_models = [model_override] if model_override else settings.get_candidate_models()
+    if candidate_models_override:
+        requested_models = [
+            _normalize_model_name(model_name)
+            for model_name in candidate_models_override
+            if (model_name or "").strip()
+        ]
+    elif model_override:
+        requested_models = [_normalize_model_name(model_override)]
+    else:
+        requested_models = settings.get_candidate_models()
 
     extraction_limit = None
     if ignore_size_limit:
@@ -301,7 +311,8 @@ def process_pdf_with_gemini_with_metrics(
         return False, "", f"PDF extraction failed: {pages_or_error}", {
             "error": str(pages_or_error),
             "extraction_message": extraction_message,
-            "requested_model": model_override,
+            "requested_model": requested_models[0] if requested_models else None,
+            "candidate_models": requested_models,
             "page_metrics": [],
         }
 
@@ -425,7 +436,8 @@ Provide ONLY the Markdown output, no additional commentary."""
 
     if non_empty_pages == 0:
         return False, "", "No non-empty pages found in PDF", {
-            "requested_model": model_override,
+            "requested_model": requested_models[0] if requested_models else None,
+            "candidate_models": requested_models,
             "page_metrics": page_metrics,
             "extraction_message": extraction_message,
             "total_pages": page_count,
@@ -440,14 +452,16 @@ Provide ONLY the Markdown output, no additional commentary."""
                 "",
                 "No pages were converted successfully. " + "; ".join(page_errors[:3]),
                 {
-                    "requested_model": model_override,
+                    "requested_model": requested_models[0] if requested_models else None,
+                    "candidate_models": requested_models,
                     "page_metrics": page_metrics,
                     "extraction_message": extraction_message,
                     "total_pages": page_count,
                 },
             )
         return False, "", "No Markdown content was generated", {
-            "requested_model": model_override,
+            "requested_model": requested_models[0] if requested_models else None,
+            "candidate_models": requested_models,
             "page_metrics": page_metrics,
             "extraction_message": extraction_message,
             "total_pages": page_count,
@@ -520,7 +534,8 @@ Provide ONLY the Markdown output, no additional commentary."""
     effective_total_tokens_total = effective_input_tokens_total + effective_output_tokens_total
 
     metrics = {
-        "requested_model": model_override,
+        "requested_model": requested_models[0] if requested_models else None,
+        "candidate_models": requested_models,
         "used_models": sorted(used_models),
         "extraction_message": extraction_message,
         "total_pages": page_count,

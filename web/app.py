@@ -120,6 +120,8 @@ def _format_quality_summary(metrics_payload: dict | None) -> str:
         f"{icon} **Quality Verdict: {decision.get('verdict', 'REVIEW_MANUAL')}**\n"
         f"- **Reason**: {decision.get('reason', 'No reason provided')}\n"
         f"- **Trigger**: {decision.get('run_trigger', 'unknown')}\n"
+        f"- **Judge Model**: {decision.get('judge_model', 'N/A')}\n"
+        f"- **Judge Mode**: {decision.get('judge_mode', 'N/A')}\n"
         f"- **Critical Indicators**:\n{details}"
         f"\n- **What each indicator means**:\n{indicator_help_text}"
         f"\n- **Where to review in PDF**:\n{references_text}"
@@ -165,6 +167,46 @@ def _build_metrics_table(metrics_payload: dict | None) -> list[list[str]]:
     return rows
 
 
+def _format_judge_diagnostics(diagnostics_payload: dict | None) -> str:
+    """Render judge diagnostics payload for UI display."""
+    if not diagnostics_payload:
+        return "Judge diagnostics unavailable."
+
+    decision = diagnostics_payload.get("decision", {})
+    diagnostics = diagnostics_payload.get("diagnostics", {})
+    latency_ms = diagnostics.get("latency_ms")
+    latency_line = _format_duration_mmss(latency_ms)
+
+    fallback_error = diagnostics.get("fallback_error")
+    if fallback_error:
+        return (
+            "### Judge Diagnostics\n"
+            f"- **Mode**: {diagnostics_payload.get('judge_mode', 'N/A')}\n"
+            f"- **Model**: {diagnostics_payload.get('judge_model', 'N/A')}\n"
+            f"- **Trigger**: {diagnostics_payload.get('run_trigger', 'N/A')}\n"
+            f"- **Fallback Error**: {fallback_error}"
+        )
+
+    input_summary = diagnostics.get("input_summary", {})
+    llm_output = diagnostics.get("llm_output", {})
+    text_excerpt = diagnostics.get("llm_text_excerpt")
+    excerpt_block = f"\n- **LLM Text Excerpt**: `{text_excerpt}`" if text_excerpt else ""
+
+    return (
+        "### Judge Diagnostics\n"
+        f"- **Mode**: {diagnostics_payload.get('judge_mode', 'N/A')}\n"
+        f"- **Model**: {diagnostics_payload.get('judge_model', 'N/A')}\n"
+        f"- **Trigger**: {diagnostics_payload.get('run_trigger', 'N/A')}\n"
+        f"- **LLM Latency (ms)**: {latency_ms}\n"
+        f"- **LLM Latency (mm:ss)**: {latency_line}\n"
+        f"- **Verdict**: {decision.get('verdict', llm_output.get('verdict', 'N/A'))}\n"
+        f"- **Semaphore**: {decision.get('semaphore', llm_output.get('semaphore', 'N/A'))}\n"
+        f"- **Reason**: {decision.get('reason', llm_output.get('reason', 'N/A'))}\n"
+        f"- **Input Summary Keys**: {', '.join(input_summary.keys()) if isinstance(input_summary, dict) else 'N/A'}"
+        f"{excerpt_block}"
+    )
+
+
 def convert_pdf(pdf_file, judge_mode):
     """
     Convert a PDF file by sending it to the FastAPI backend.
@@ -180,9 +222,10 @@ def convert_pdf(pdf_file, judge_mode):
             - status_message: User-facing status or error message.
             - quality_summary: Formatted summary of quality metrics.
             - metrics_table: 2-column metrics data for Gradio Dataframe display.
+            - judge_diagnostics: Diagnostic details from the judge endpoint.
     """
     if pdf_file is None:
-        return "", "❌ Please upload a PDF file", "", [["status", "no_file"]]
+        return "", "❌ Please upload a PDF file", "", [["status", "no_file"]], ""
 
     try:
         AppState.processing = True
@@ -201,6 +244,7 @@ def convert_pdf(pdf_file, judge_mode):
                 ),
                 "",
                 [["status", "size_limit_exceeded"]],
+                "",
             )
 
         # Send to API
@@ -229,6 +273,7 @@ def convert_pdf(pdf_file, judge_mode):
 
             quality_summary = "Quality summary unavailable."
             metrics_rows = [["status", "not_loaded"]]
+            judge_diagnostics = "Judge diagnostics unavailable."
             try:
                 metrics_response = requests.get(
                     f"{API_BASE_URL}/api/metrics/{result['pdf_id']}",
@@ -245,24 +290,42 @@ def convert_pdf(pdf_file, judge_mode):
                 else:
                     quality_summary = "No metrics found for this PDF yet."
                     metrics_rows = [["status", "no_metrics_record"]]
+
+                diagnostics_response = requests.get(
+                    f"{API_BASE_URL}/api/judge/diagnostics/{result['pdf_id']}",
+                    timeout=10,
+                )
+                if diagnostics_response.status_code == 200:
+                    judge_diagnostics = _format_judge_diagnostics(
+                        diagnostics_response.json()
+                    )
+                else:
+                    judge_diagnostics = "Judge diagnostics endpoint returned no data."
             except Exception as metric_error:
                 quality_summary = f"Metrics lookup failed: {str(metric_error)}"
                 metrics_rows = [["status", "metrics_lookup_failed"]]
+                judge_diagnostics = f"Judge diagnostics lookup failed: {str(metric_error)}"
 
-            return result["markdown_content"], status_msg, quality_summary, metrics_rows
+            return (
+                result["markdown_content"],
+                status_msg,
+                quality_summary,
+                metrics_rows,
+                judge_diagnostics,
+            )
 
         else:
             error_data = response.json()
             error_msg = error_data.get("detail", error_data.get("error", "Unknown error"))
-            return "", f"❌ **Error**: {error_msg}", "", [["status", "api_error"]]
+            return "", f"❌ **Error**: {error_msg}", "", [["status", "api_error"]], ""
 
     except requests.exceptions.ConnectionError:
         return "", (
             f"❌ **Connection Error**: Cannot reach API at {API_BASE_URL}\n"
             f"Make sure FastAPI server is running: `uvicorn api.main:app --reload`"
-        ), "", [["status", "connection_error"]]
+        ), "", [["status", "connection_error"]], ""
     except Exception as e:
-        return "", f"❌ **Error**: {str(e)}", "", [["status", "unexpected_error"]]
+        return "", f"❌ **Error**: {str(e)}", "", [["status", "unexpected_error"]], ""
     finally:
         AppState.processing = False
 
@@ -437,6 +500,11 @@ def create_interface():
                 col_count=(2, "fixed"),
             )
 
+        with gr.Row():
+            judge_diagnostics_output = gr.Markdown(
+                value="Judge diagnostics will appear after conversion.",
+            )
+
         # Actions
         with gr.Row():
             copy_btn = gr.Button("📋 Copy Markdown")
@@ -466,6 +534,7 @@ def create_interface():
                 status_output,
                 quality_summary_output,
                 metrics_table_output,
+                judge_diagnostics_output,
             ],
         )
 
@@ -496,6 +565,7 @@ def create_interface():
         - `POST /api/convert` - Convert PDF to Markdown
         - `GET /api/history` - Get processing history
         - `GET /api/convert/{pdf_id}` - Retrieve cached result
+        - `GET /api/judge/diagnostics/{pdf_id}` - Retrieve LLM judge diagnostics
         - `DELETE /api/cache` - Clear cache and metrics
         
         **Made with ❤️ by ProjectSight**

@@ -13,7 +13,7 @@ AI-powered PDF to Markdown converter using Google Gemini (configurable model wit
 - 📄 **Page-by-Page Processing**: Handles large PDFs efficiently by processing one page at a time
 - 💾 **Intelligent Caching**: Stores conversion results to avoid reprocessing the same PDF (saves API tokens!)
 - 🧹 **Server Cache Clear**: Clear cached PDFs and OCR metrics from API/UI when you need a clean rerun
-- 🚦 **Quality Judge (Rule-Based)**: Auto/Force/Skip judge execution mode with RED/AMBER/GREEN decisioning
+- 🚦 **Quality Judge (LLM + Fallback)**: Gemini 3.1 Pro judge with Auto/Force/Skip mode and deterministic fallback
 - 🔎 **Actionable Quality References**: Returns pages to review with short excerpts to guide human validation
 - ⏱️ **Human-Friendly Timing**: UI shows processing duration in `mm:ss`
 - 🚀 **FastAPI Backend**: RESTful API with automatic Swagger documentation
@@ -60,8 +60,8 @@ cp .env.example .env  # macOS/Linux
 # Edit .env and add your credentials:
 # GEMINI_API_KEY=your_actual_api_key_here
 # SYSTEM_PROMPT=./prompts/system_prompt.prompty
-# BENCHMARK_MODELS=gemini-3.1-pro-preview,gemini-2.5-pro
-# BENCHMARK_MODEL_PRICES=gemini-3.1-pro-preview:INPUT_PER_1M:OUTPUT_PER_1M,gemini-2.5-pro:INPUT_PER_1M:OUTPUT_PER_1M
+# BENCHMARK_MODELS=gemini-3.1-pro-preview
+# BENCHMARK_MODEL_PRICES=gemini-3.1-pro-preview:INPUT_PER_1M:OUTPUT_PER_1M
 ```
 
 ### 3. Run the Application
@@ -165,6 +165,16 @@ curl "http://localhost:8000/api/metrics/abc123..."
 - `decision` (verdict/semaphore/reason/trigger)
 - `review_pages` and `page_review_references` (page-level hints for humans)
 
+### Get Judge Diagnostics (LLM)
+```bash
+GET /api/judge/diagnostics/{pdf_id}
+
+curl "http://localhost:8000/api/judge/diagnostics/abc123..."
+```
+
+Response includes judge mode/model, decision summary, and diagnostics payload
+(LLM latency, summarized input signals, and parsed LLM output when available).
+
 ### Clear Server Cache
 ```bash
 DELETE /api/cache?include_metrics=true
@@ -205,7 +215,7 @@ projectsight-ocr-service/
 ├── api/
 │   ├── main.py              # FastAPI application and endpoints
 │   ├── gemini_service.py    # Gemini integration + per-page metrics
-│   └── judge_service.py     # Rule-based quality judge
+│   └── judge_service.py     # LLM quality judge + deterministic fallback
 ├── web/
 │   └── app.py               # Gradio web interface
 ├── auth/
@@ -228,8 +238,11 @@ Edit `.env` to customize:
 ```ini
 # Google Generative AI
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-3.1-pro
-GEMINI_FALLBACK_MODELS=gemini-1.5-pro
+GEMINI_MODEL=gemini-3.1-flash
+GEMINI_FALLBACK_MODELS=
+GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash
+GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite
+GEMINI_LARGE_DOC_PAGE_THRESHOLD=100
 
 # System prompt file path (.prompty or .md)
 SYSTEM_PROMPT=./prompts/system_prompt.prompty
@@ -249,7 +262,7 @@ GRADIO_PORT=7860
 MAX_FILE_SIZE_MB=30
 
 # Benchmark defaults
-BENCHMARK_MODELS=gemini-3.1-pro-preview,gemini-2.5-pro
+BENCHMARK_MODELS=gemini-3.1-pro-preview
 BENCHMARK_DISABLE_CACHE=true
 BENCHMARK_IGNORE_SIZE_LIMIT=true
 BENCHMARK_MAX_FILE_SIZE_MB=50
@@ -259,12 +272,28 @@ BENCHMARK_MAX_FILE_SIZE_MB=50
 BENCHMARK_MODEL_PRICES=
 
 # Judge behavior
-JUDGE_MODEL=gemini-3.1-pro
+JUDGE_MODEL=gemini-3.1-pro-preview
 JUDGE_ENABLED=true
 JUDGE_SIMILARITY_THRESHOLD=0.95
 JUDGE_ONLY_NEW_DOCUMENTS=true
 JUDGE_SAMPLE_RATE=0.0
 ```
+
+### Conversion Model Policy
+
+- The service counts PDF pages before conversion.
+- If `page_count < GEMINI_LARGE_DOC_PAGE_THRESHOLD`, it prefers `GEMINI_SMALL_DOC_MODEL`.
+- If `page_count >= GEMINI_LARGE_DOC_PAGE_THRESHOLD`, it prefers `GEMINI_LARGE_DOC_MODEL`.
+- `GEMINI_FALLBACK_MODELS` is still used as fallback chain if preferred models are unavailable.
+- Judge metadata is recorded with `JUDGE_MODEL` (default `gemini-3.1-pro-preview`).
+
+### LLM Judge
+
+- The judge now uses a real Gemini LLM decision step (`JUDGE_MODEL`) to produce:
+  `verdict`, `semaphore`, and `reason`.
+- Rule-based metric levels are still computed and stored for stable UI reporting.
+- If the LLM response fails (timeout, model error, invalid JSON), the system automatically
+  falls back to deterministic rule-based judgment.
 
 ### Judge Mode (`POST /api/convert`)
 

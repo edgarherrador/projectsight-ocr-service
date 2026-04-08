@@ -12,8 +12,11 @@ class Settings(BaseSettings):
 
     # Gemini API Configuration
     gemini_api_key: str
-    gemini_model: str = "gemini-3.1-pro"
-    gemini_fallback_models: str = "gemini-1.5-pro"
+    gemini_model: str = "gemini-3.1-flash"
+    gemini_fallback_models: str = ""
+    gemini_small_doc_model: str = "gemini-3.1-flash"
+    gemini_large_doc_model: str = "gemini-3.1-flash-lite"
+    gemini_large_doc_page_threshold: int = 100
     system_prompt: str = "./prompts/system_prompt.prompty"
 
     # Database Configuration
@@ -31,7 +34,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 30
 
     # Benchmark Configuration
-    benchmark_models: str = "gemini-3.1-pro-preview,gemini-2.5-pro"
+    benchmark_models: str = "gemini-3.1-pro-preview"
     benchmark_disable_cache: bool = True
     benchmark_ignore_size_limit: bool = True
     benchmark_max_file_size_mb: int = 50
@@ -39,7 +42,7 @@ class Settings(BaseSettings):
     benchmark_model_prices: str = ""
 
     # Judge Configuration
-    judge_model: str = "gemini-3.1-pro"
+    judge_model: str = "gemini-3.1-pro-preview"
     judge_enabled: bool = True
     judge_similarity_threshold: float = 0.95
     judge_only_new_documents: bool = True
@@ -95,6 +98,35 @@ class Settings(BaseSettings):
         primary = self.gemini_model.strip()
         if primary:
             candidates.append(primary)
+
+        if self.gemini_fallback_models:
+            for model_name in self.gemini_fallback_models.split(","):
+                cleaned = model_name.strip()
+                if cleaned and cleaned not in candidates:
+                    candidates.append(cleaned)
+
+        return candidates
+
+    def get_conversion_candidate_models(self, page_count: int) -> list[str]:
+        """Return conversion models selected by page-count policy plus fallbacks."""
+        candidates: list[str] = []
+
+        threshold = max(1, int(self.gemini_large_doc_page_threshold))
+        preferred_model = (
+            self.gemini_large_doc_model
+            if page_count >= threshold
+            else self.gemini_small_doc_model
+        )
+
+        for model_name in [
+            preferred_model,
+            self.gemini_small_doc_model,
+            self.gemini_large_doc_model,
+            self.gemini_model,
+        ]:
+            cleaned = (model_name or "").strip()
+            if cleaned and cleaned not in candidates:
+                candidates.append(cleaned)
 
         if self.gemini_fallback_models:
             for model_name in self.gemini_fallback_models.split(","):

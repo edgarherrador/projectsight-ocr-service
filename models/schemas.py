@@ -67,6 +67,8 @@ class JudgeDecision(BaseModel):
     semaphore: str = Field(..., description="GREEN, AMBER, or RED")
     reason: str = Field(..., description="Short reason for decision")
     run_trigger: str = Field(..., description="Why judge ran or skipped")
+    judge_model: Optional[str] = Field(None, description="Gemini model used by judge")
+    judge_mode: Optional[str] = Field(None, description="llm, rules, or rules_fallback")
 
 
 class PageReviewReference(BaseModel):
