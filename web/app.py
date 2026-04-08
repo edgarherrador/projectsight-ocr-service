@@ -218,7 +218,7 @@ def convert_pdf(pdf_file, judge_mode):
             AppState.last_result = result
 
             # Build status message
-                f"- **Converted At**: {_format_timestamp(result.get('timestamp'))}"
+            cached_marker = "✅ (From Cache)" if result["is_cached"] else "🆕 (Newly Generated)"
             status_msg = (
                 f"✨ **Conversion Successful** {cached_marker}\n"
                 f"- **PDF**: {result['file_name']}\n"
@@ -302,7 +302,7 @@ def load_history():
         else:
             return "❌ Failed to load history"
 
-def clear_server_cache():
+    except requests.exceptions.ConnectionError:
         return f"❌ Cannot reach API at {API_BASE_URL}"
     except Exception as e:
         return f"❌ Error loading history: {str(e)}"
