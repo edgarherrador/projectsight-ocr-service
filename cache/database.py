@@ -3,9 +3,10 @@ Database setup and management for caching PDF processing results.
 Uses SQLite for local persistent storage.
 """
 import hashlib
+import json
 from datetime import datetime
 from pathlib import Path
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Boolean
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Boolean, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from config.settings import settings
@@ -34,6 +35,20 @@ class PDFCache(Base):
     pages_processed = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     is_cached = Column(Boolean, default=False)
+
+
+class OCRMetricsCache(Base):
+    """SQLAlchemy model for OCR metrics and judge decisions."""
+
+    __tablename__ = "ocr_metrics_cache"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pdf_id = Column(String, index=True)
+    file_name = Column(String, index=True)
+    is_cached = Column(Boolean, default=False)
+    metrics_json = Column(Text)
+    decision_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 # Create all tables
@@ -159,3 +174,86 @@ def get_history() -> list[dict]:
     except SQLAlchemyError as e:
         print(f"Database error while retrieving history: {e}")
         return []
+
+
+def save_ocr_metrics(
+    pdf_id: str,
+    file_name: str,
+    is_cached: bool,
+    metrics: dict,
+    decision: dict | None,
+) -> bool:
+    """Save OCR metrics and optional judge decision."""
+    try:
+        db = SessionLocal()
+        entry = OCRMetricsCache(
+            pdf_id=pdf_id,
+            file_name=file_name,
+            is_cached=is_cached,
+            metrics_json=json.dumps(metrics, ensure_ascii=True),
+            decision_json=(json.dumps(decision, ensure_ascii=True) if decision else None),
+            created_at=datetime.utcnow(),
+        )
+        db.add(entry)
+        db.commit()
+        db.close()
+        return True
+    except SQLAlchemyError as e:
+        print(f"Database error while saving OCR metrics: {e}")
+        return False
+
+
+def get_latest_ocr_metrics(pdf_id: str) -> dict | None:
+    """Retrieve the latest metrics record by PDF id."""
+    try:
+        db = SessionLocal()
+        entry = (
+            db.query(OCRMetricsCache)
+            .filter_by(pdf_id=pdf_id)
+            .order_by(OCRMetricsCache.created_at.desc())
+            .first()
+        )
+        db.close()
+
+        if not entry:
+            return None
+
+        return {
+            "pdf_id": entry.pdf_id,
+            "file_name": entry.file_name,
+            "is_cached": entry.is_cached,
+            "metrics": json.loads(entry.metrics_json) if entry.metrics_json else {},
+            "decision": json.loads(entry.decision_json) if entry.decision_json else None,
+            "timestamp": entry.created_at,
+        }
+    except (SQLAlchemyError, json.JSONDecodeError) as e:
+        print(f"Database error while reading OCR metrics: {e}")
+        return None
+
+
+def clear_cache(delete_metrics: bool = True) -> dict:
+    """Clear cached PDF results and optionally metrics rows."""
+    try:
+        db = SessionLocal()
+
+        deleted_pdfs = db.query(PDFCache).delete()
+        deleted_metrics = 0
+        if delete_metrics:
+            deleted_metrics = db.query(OCRMetricsCache).delete()
+
+        db.commit()
+        db.close()
+
+        return {
+            "success": True,
+            "deleted_pdfs": int(deleted_pdfs),
+            "deleted_metrics": int(deleted_metrics),
+        }
+    except SQLAlchemyError as e:
+        print(f"Database error while clearing cache: {e}")
+        return {
+            "success": False,
+            "deleted_pdfs": 0,
+            "deleted_metrics": 0,
+            "error": str(e),
+        }

@@ -102,6 +102,14 @@ def _estimate_tokens_from_chars(char_count: int) -> int:
     return max(1, (char_count + 3) // 4)
 
 
+def _compact_excerpt(text: str, max_len: int = 180) -> str:
+    """Return a normalized short excerpt for UI-level references."""
+    normalized = " ".join((text or "").split())
+    if len(normalized) <= max_len:
+        return normalized
+    return normalized[:max_len].rstrip() + "..."
+
+
 def _generate_page_markdown_with_metrics(
     prompt: str,
     candidate_models: list[str] | None = None,
@@ -383,6 +391,8 @@ Provide ONLY the Markdown output, no additional commentary."""
                     "estimated_input_tokens": estimated_input_tokens,
                     "estimated_output_tokens": estimated_output_tokens,
                     "token_count_method": token_count_method,
+                    "source_excerpt": _compact_excerpt(page_text_for_prompt),
+                    "output_excerpt": _compact_excerpt(markdown_text),
                 }
             )
 
@@ -406,6 +416,8 @@ Provide ONLY the Markdown output, no additional commentary."""
                     "estimated_input_tokens": _estimate_tokens_from_chars(len(page_text_for_prompt)),
                     "estimated_output_tokens": 0,
                     "token_count_method": "estimated_chars",
+                    "source_excerpt": _compact_excerpt(page_text_for_prompt),
+                    "output_excerpt": "",
                 }
             )
 

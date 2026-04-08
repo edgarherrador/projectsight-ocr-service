@@ -51,6 +51,59 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = Field(None, description="Additional error details")
 
 
+class MetricLevelSummary(BaseModel):
+    """Severity classification for a single score."""
+
+    score_name: str = Field(..., description="Metric name")
+    value: Optional[float] = Field(None, description="Metric value")
+    level: str = Field(..., description="GREEN, AMBER, or RED")
+    threshold_note: str = Field(..., description="Threshold rule used")
+
+
+class JudgeDecision(BaseModel):
+    """Judge decision and trigger metadata."""
+
+    verdict: str = Field(..., description="Decision result")
+    semaphore: str = Field(..., description="GREEN, AMBER, or RED")
+    reason: str = Field(..., description="Short reason for decision")
+    run_trigger: str = Field(..., description="Why judge ran or skipped")
+
+
+class PageReviewReference(BaseModel):
+    """Actionable page-level review hint for humans."""
+
+    page_num: int = Field(..., description="Page number to review in original PDF")
+    similarity: Optional[float] = Field(None, description="Page-level similarity score")
+    severity: str = Field(..., description="AMBER or RED")
+    why: str = Field(..., description="Reason this page should be reviewed")
+    source_excerpt: Optional[str] = Field(None, description="Short source text excerpt from the flagged page")
+
+
+class OCRMetricsResponse(BaseModel):
+    """API response for stored OCR and judge metrics."""
+
+    pdf_id: str
+    file_name: str
+    is_cached: bool
+    token_count_method: Optional[str] = None
+    similarity: Optional[float] = None
+    cer_estimate: Optional[float] = None
+    wer_estimate: Optional[float] = None
+    latency_ms_total: Optional[float] = None
+    input_tokens_total: Optional[int] = None
+    output_tokens_total: Optional[int] = None
+    effective_input_tokens_total: Optional[int] = None
+    effective_output_tokens_total: Optional[int] = None
+    estimated_total_cost_usd: Optional[float] = None
+    context_window_utilization_pct: Optional[float] = None
+    output_window_utilization_pct: Optional[float] = None
+    levels: list[MetricLevelSummary] = Field(default_factory=list)
+    review_pages: list[int] = Field(default_factory=list)
+    page_review_references: list[PageReviewReference] = Field(default_factory=list)
+    decision: Optional[JudgeDecision] = None
+    timestamp: datetime
+
+
 # OAuth2 schemas (prepared for future use)
 class TokenRequest(BaseModel):
     """Request schema for token generation (OAuth2 prepared)."""

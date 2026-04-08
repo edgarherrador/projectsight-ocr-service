@@ -8,6 +8,10 @@ AI-powered PDF to Markdown converter using Google Gemini (configurable model wit
 - 🔁 **Model Fallback**: Automatically tries fallback models when the primary model is unavailable
 - 📄 **Page-by-Page Processing**: Handles large PDFs efficiently by processing one page at a time
 - 💾 **Intelligent Caching**: Stores conversion results to avoid reprocessing the same PDF (saves API tokens!)
+- 🧹 **Server Cache Clear**: Clear cached PDFs and OCR metrics from API/UI when you need a clean rerun
+- 🚦 **Quality Judge (Rule-Based)**: Auto/Force/Skip judge execution mode with RED/AMBER/GREEN decisioning
+- 🔎 **Actionable Quality References**: Returns pages to review with short excerpts to guide human validation
+- ⏱️ **Human-Friendly Timing**: UI shows processing duration in `mm:ss`
 - 🚀 **FastAPI Backend**: RESTful API with automatic Swagger documentation
 - 🎨 **Gradio Web Interface**: User-friendly web UI for easy PDF uploads
 - 📊 **History Tracking**: View all processed PDFs and their metadata
@@ -93,6 +97,12 @@ curl -X POST "http://localhost:8000/api/convert" \
   -H "accept: application/json" \
   -F "file=@your_file.pdf"
 
+# Optional judge override per request:
+# auto (default), force, skip
+curl -X POST "http://localhost:8000/api/convert?judge_mode=force" \
+  -H "accept: application/json" \
+  -F "file=@your_file.pdf"
+
 # Using Bruno or Postman: Import from http://localhost:8000/docs
 ```
 
@@ -138,6 +148,28 @@ GET /api/convert/{pdf_id}
 curl "http://localhost:8000/api/convert/abc123..."
 ```
 
+### Get OCR Metrics + Judge Decision
+```bash
+GET /api/metrics/{pdf_id}
+
+curl "http://localhost:8000/api/metrics/abc123..."
+```
+
+**Response highlights:**
+- `similarity`, `cer_estimate`, `wer_estimate`
+- `latency_ms_total`, token totals, cost estimate
+- `decision` (verdict/semaphore/reason/trigger)
+- `review_pages` and `page_review_references` (page-level hints for humans)
+
+### Clear Server Cache
+```bash
+DELETE /api/cache?include_metrics=true
+
+curl -X DELETE "http://localhost:8000/api/cache?include_metrics=true"
+```
+
+Use this endpoint to remove cached PDF conversions and (optionally) OCR metrics rows.
+
 ### Health Check
 ```bash
 GET /health
@@ -168,13 +200,16 @@ projectsight-ocr-service/
 │   └── pdf_processor.py      # PDF extraction and validation
 ├── api/
 │   ├── main.py              # FastAPI application and endpoints
-│   └── gemini_service.py    # Gemini integration
+│   ├── gemini_service.py    # Gemini integration + per-page metrics
+│   └── judge_service.py     # Rule-based quality judge
 ├── web/
 │   └── app.py               # Gradio web interface
 ├── auth/
 │   └── oauth.py             # OAuth2 preparation (not active)
 ├── prompts/
 │   └── system_prompt.prompty # System prompt file (.prompty or .md)
+├── scripts/
+│   └── benchmark_ocr.py     # OCR benchmark runner
 ├── pyproject.toml           # Project dependencies
 ├── .env.example             # Environment variables template
 ├── .gitignore               # Git ignore rules
@@ -218,7 +253,37 @@ BENCHMARK_MAX_FILE_SIZE_MB=50
 # Optional pricing map for estimated benchmark cost (USD per 1M tokens)
 # Format: model:input_per_1m:output_per_1m,model2:input_per_1m:output_per_1m
 BENCHMARK_MODEL_PRICES=
+
+# Judge behavior
+JUDGE_MODEL=gemini-3.1-pro
+JUDGE_ENABLED=true
+JUDGE_SIMILARITY_THRESHOLD=0.95
+JUDGE_ONLY_NEW_DOCUMENTS=true
+JUDGE_SAMPLE_RATE=0.0
 ```
+
+### Judge Mode (`POST /api/convert`)
+
+- `auto`: Follows policy + thresholds.
+- `force`: Always runs judge for this request.
+- `skip`: Skips judge for this request.
+
+In the Gradio UI, this is exposed as **Judge Mode** (`auto | force | skip`).
+
+## 🚦 OCR Quality and Human Review
+
+The service stores OCR metrics and judge outcomes per document.
+
+Key indicators:
+- **Text similarity**: Higher is better.
+- **Estimated character error rate (CER)**: Lower is better.
+- **Document structure fidelity (proxy)**: Higher is better.
+
+When quality needs attention, the API returns:
+- `review_pages`: list of page numbers to inspect first.
+- `page_review_references`: per-page severity/reason and a short source excerpt.
+
+This helps a human reviewer quickly navigate to where quality drift likely happened.
 
 ## ⚖️ Quick OCR Benchmark (Quality + Cost + Latency)
 
@@ -270,6 +335,7 @@ Notes:
 - **Location**: `./cache/pdf_cache.db`
 - **Tables**: 
   - `pdf_cache`: Stores PDF IDs, file names, converted Markdown, and timestamps
+  - `ocr_metrics_cache`: Stores OCR metrics snapshots and judge decisions
 - **Features**:
   - Automatic schema creation on first run
   - SHA256 hashing for duplicate detection

@@ -38,11 +38,19 @@ class Settings(BaseSettings):
     # Format: model_name:input_per_1m:output_per_1m,model2:input_per_1m:output_per_1m
     benchmark_model_prices: str = ""
 
+    # Judge Configuration
+    judge_model: str = "gemini-3.1-pro"
+    judge_enabled: bool = True
+    judge_similarity_threshold: float = 0.95
+    judge_only_new_documents: bool = True
+    judge_sample_rate: float = 0.0
+
     class Config:
         """Pydantic config."""
 
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
 
     def get_system_prompt_text(self) -> str:
         """Load system prompt content from file path configured in SYSTEM_PROMPT."""
