@@ -190,8 +190,8 @@ def save_ocr_metrics(
             pdf_id=pdf_id,
             file_name=file_name,
             is_cached=is_cached,
-            metrics_json=json.dumps(metrics, ensure_ascii=True),
-            decision_json=(json.dumps(decision, ensure_ascii=True) if decision else None),
+            metrics_json=json.dumps(metrics, ensure_ascii=False),
+            decision_json=(json.dumps(decision, ensure_ascii=False) if decision else None),
             created_at=datetime.utcnow(),
         )
         db.add(entry)

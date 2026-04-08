@@ -107,7 +107,9 @@ def _compact_excerpt(text: str, max_len: int = 180) -> str:
     normalized = " ".join((text or "").split())
     if len(normalized) <= max_len:
         return normalized
-    return normalized[:max_len].rstrip() + "..."
+    truncated = normalized[:max_len].rstrip()
+    whole_word = truncated.rsplit(" ", 1)[0] if " " in truncated else truncated
+    return whole_word + "..."
 
 
 def _generate_page_markdown_with_metrics(

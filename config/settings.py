@@ -46,10 +46,20 @@ class Settings(BaseSettings):
     judge_sample_rate: float = 0.0
 
     class Config:
-        """Pydantic config."""
+        """Pydantic config for environment-based settings.
+
+        Note:
+            ``extra = "ignore"`` intentionally allows unrelated or unexpected
+            environment variables to be present without raising validation
+            errors. This differs from stricter validation behavior, so it is
+            documented here to make the tradeoff explicit for maintainers.
+        """
 
         env_file = ".env"
         case_sensitive = False
+        # Ignore extra values from the environment instead of failing settings
+        # validation. This is intentional because deployments may include
+        # additional variables unrelated to this application.
         extra = "ignore"
 
     def get_system_prompt_text(self) -> str:

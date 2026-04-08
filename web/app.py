@@ -167,13 +167,19 @@ def _build_metrics_table(metrics_payload: dict | None) -> list[list[str]]:
 
 def convert_pdf(pdf_file, judge_mode):
     """
-    Convert PDF file by sending to FastAPI backend.
+    Convert a PDF file by sending it to the FastAPI backend.
 
     Args:
-        pdf_file: Uploaded PDF file from Gradio
+        pdf_file: Uploaded PDF file from Gradio.
+        judge_mode: Selected evaluation mode used by the backend when
+            generating quality assessment results.
 
     Returns:
-        Tuple of (markdown_content, status_message, quality_summary, metrics_table)
+        Tuple containing:
+            - markdown_content: Converted Markdown output.
+            - status_message: User-facing status or error message.
+            - quality_summary: Formatted summary of quality metrics.
+            - metrics_table: 2-column metrics data for Gradio Dataframe display.
     """
     if pdf_file is None:
         return "", "❌ Please upload a PDF file", "", [["status", "no_file"]]
@@ -212,7 +218,7 @@ def convert_pdf(pdf_file, judge_mode):
             AppState.last_result = result
 
             # Build status message
-            cached_marker = "✅ (From Cache)" if result["is_cached"] else "🆕 (Newly Generated)"
+                f"- **Converted At**: {_format_timestamp(result.get('timestamp'))}"
             status_msg = (
                 f"✨ **Conversion Successful** {cached_marker}\n"
                 f"- **PDF**: {result['file_name']}\n"
@@ -296,7 +302,7 @@ def load_history():
         else:
             return "❌ Failed to load history"
 
-    except requests.exceptions.ConnectionError:
+def clear_server_cache():
         return f"❌ Cannot reach API at {API_BASE_URL}"
     except Exception as e:
         return f"❌ Error loading history: {str(e)}"
