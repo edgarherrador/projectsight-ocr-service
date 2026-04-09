@@ -238,10 +238,10 @@ Edit `.env` to customize:
 ```ini
 # Google Generative AI
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-3.1-flash
+GEMINI_MODEL=gemini-3.1-flash-preview
 GEMINI_FALLBACK_MODELS=
-GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash
-GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite
+GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash-preview
+GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite-preview
 GEMINI_LARGE_DOC_PAGE_THRESHOLD=100
 
 # System prompt file path (.prompty or .md)

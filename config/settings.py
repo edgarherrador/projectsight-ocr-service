@@ -12,10 +12,10 @@ class Settings(BaseSettings):
 
     # Gemini API Configuration
     gemini_api_key: str
-    gemini_model: str = "gemini-3.1-flash"
+    gemini_model: str = "gemini-3.1-flash-preview"
     gemini_fallback_models: str = ""
-    gemini_small_doc_model: str = "gemini-3.1-flash"
-    gemini_large_doc_model: str = "gemini-3.1-flash-lite"
+    gemini_small_doc_model: str = "gemini-3.1-flash-preview"
+    gemini_large_doc_model: str = "gemini-3.1-flash-lite-preview"
     gemini_large_doc_page_threshold: int = 100
     system_prompt: str = "./prompts/system_prompt.prompty"
 

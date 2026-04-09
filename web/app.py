@@ -4,6 +4,7 @@ Provides a user-friendly web UI that consumes the FastAPI backend.
 """
 import gradio as gr
 import requests
+import socket
 from pathlib import Path
 from datetime import datetime
 from config.settings import settings
@@ -30,6 +31,22 @@ INDICATOR_HELP = {
     "cer_estimate": "Approximate character-level error ratio. Lower is better.",
     "structural_fidelity_proxy": "Proxy signal for preserving lists, headers and layout. Higher is better.",
 }
+
+
+def _find_available_port(preferred_port: int, max_port_checks: int = 20) -> int:
+    """Return first available localhost port starting from preferred_port."""
+    base_port = max(1, int(preferred_port))
+    for offset in range(max(1, int(max_port_checks))):
+        candidate_port = base_port + offset
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((settings.gradio_host, candidate_port))
+                return candidate_port
+            except OSError:
+                continue
+
+    return base_port
 
 
 def _pretty_indicator_name(raw_name: str) -> str:
@@ -267,7 +284,7 @@ def convert_pdf(pdf_file, judge_mode):
                 f"✨ **Conversion Successful** {cached_marker}\n"
                 f"- **PDF**: {result['file_name']}\n"
                 f"- **Pages**: {result['pages_processed']}\n"
-                f"- **ID**: `{result['pdf_id'][:16]}...`\n"
+                f"- **ID**: `{result['pdf_id']}`\n"
                 f"- **Processed At**: {_format_timestamp(result.get('timestamp'))}"
             )
 
@@ -497,7 +514,7 @@ def create_interface():
                 interactive=False,
                 label="📊 OCR Quality Metrics",
                 row_count=(8, "dynamic"),
-                col_count=(2, "fixed"),
+                column_count=(2, "fixed"),
             )
 
         with gr.Row():
@@ -577,9 +594,16 @@ def create_interface():
 
 if __name__ == "__main__":
     demo = create_interface()
+    launch_port = _find_available_port(settings.gradio_port)
+    if launch_port != settings.gradio_port:
+        print(
+            f"[web] Port {settings.gradio_port} is busy. "
+            f"Launching Gradio on {launch_port} instead."
+        )
+
     demo.launch(
         theme=gr.themes.Soft(),
         server_name=settings.gradio_host,
-        server_port=settings.gradio_port,
+        server_port=launch_port,
         share=False,
     )

@@ -129,9 +129,9 @@ Create `.env` from `.env.example` and set at least:
 ```ini
 GEMINI_API_KEY=your_api_key_here
 SYSTEM_PROMPT=./prompts/system_prompt.prompty
-GEMINI_MODEL=gemini-3.1-flash
-GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash
-GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite
+GEMINI_MODEL=gemini-3.1-flash-preview
+GEMINI_SMALL_DOC_MODEL=gemini-3.1-flash-preview
+GEMINI_LARGE_DOC_MODEL=gemini-3.1-flash-lite-preview
 GEMINI_LARGE_DOC_PAGE_THRESHOLD=100
 MAX_FILE_SIZE_MB=30
 DATABASE_PATH=./cache/pdf_cache.db

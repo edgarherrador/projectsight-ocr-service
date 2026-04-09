@@ -38,14 +38,15 @@ REM Wait a bit for API to start
 timeout /t 2 /nobreak
 
 REM Start Gradio server
-echo Starting Gradio interface on http://127.0.0.1:7860...
+echo Starting Gradio interface (preferred port: http://127.0.0.1:7860)...
+echo Note: if 7860 is busy, web/app.py will auto-select the next available port.
 start cmd /k "uv run python web/app.py"
 
 echo.
 echo ========================================
 echo Servers starting...
 echo FastAPI Swagger: http://localhost:8000/docs
-echo Gradio Interface: http://localhost:7860
+echo Gradio Interface: check the Gradio terminal for the final URL/port
 echo ========================================
 echo.
 
